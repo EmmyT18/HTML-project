@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ultimate Snake Game</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: monospace;
+      background-color: #000;
+      color: #0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    h1 {
+      margin: 20px;
+      text-shadow: 0 0 10px #0f0;
+    }
+
+    #score {
+      font-size: 1.5rem;
+      text-shadow: 0 0 10px #0f0;
+    }
+
+    canvas {
+      border: 3px solid #0f0;
+      box-shadow: 0 0 20px #0f0;
+      background: radial-gradient(circle, #222, #000);
+    }
+
+    .home-button, #theme-toggle {
+      margin: 10px;
+      padding: 10px 20px;
+      background-color: #0f0;
+      color: #111;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      text-shadow: 0 0 5px #000;
+    }
+
+    .home-button:hover, #theme-toggle:hover {
+      background-color: #0c0;
+    }
+
+    #game-over {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.95);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #0f0;
+      font-size: 2rem;
+      text-align: center;
+      z-index: 9999;
+      display: none;
+      transition: opacity 0.5s ease;
+    }
+
+    #game-over h2 {
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px #0f0;
+    }
+
+    #restart-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #0f0;
+      color: #111;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      box-shadow: 0 0 10px #0f0;
+    }
+
+    #restart-btn:hover {
+      background-color: #0c0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Score: <span id="score">0</span></h1>
+  <canvas id="game" width="400" height="400"></canvas>
+  <button id="theme-toggle">🎨 Change Theme</button>
+  <a href="../index.html" class="home-button">← Back to Home</a>
+
+  <div id="game-over">
+    <h2>Game Over!</h2>
+    <p>Your score: <span id="final-score">0</span></p>
+    <button id="restart-btn">Restart Game</button>
+  </div>
+
+  <audio id="bg-music" src="music.mp3" loop autoplay muted></audio>
+  <audio id="eat-sound" src="eat.mp3"></audio>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreDisplay = document.getElementById("score");
+    const finalScore = document.getElementById("final-score");
+    const gameOverScreen = document.getElementById("game-over");
+    const restartBtn = document.getElementById("restart-btn");
+    const themeToggle = document.getElementById("theme-toggle");
+
+    const scale = 20;
+    const rows = canvas.height / scale;
+    const columns = canvas.width / scale;
+
+    let snake;
+    let food;
+    let gameLoop;
+    let particles = [];
+    let themeIndex = 0;
+    const themes = [
+      { bg: "radial-gradient(circle, #222, #000)", border: "#0f0", glow: "#0f0" },
+      { bg: "radial-gradient(circle, #005, #00a)", border: "#0ff", glow: "#0ff" },
+      { bg: "linear-gradient(to bottom, #fc466b, #3f5efb)", border: "#fff176", glow: "#fff176" }
+    ];
+
+    document.body.addEventListener('click', () => {
+      const bgMusic = document.getElementById("bg-music");
+      bgMusic.muted = false;
+      bgMusic.play();
+    }, { once: true });
+
+    function applyTheme(index) {
+      const theme = themes[index];
+      canvas.style.background = theme.bg;
+      canvas.style.borderColor = theme.border;
+      canvas.style.boxShadow = `0 0 20px ${theme.glow}`;
+    }
+
+    themeToggle.addEventListener("click", () => {
+      themeIndex = (themeIndex + 1) % themes.length;
+      applyTheme(themeIndex);
+    });
+
+    function startGame() {
+      snake = new Snake();
+      food = randomFood();
+      particles = [];
+      applyTheme(themeIndex);
+      gameLoop = setInterval(gameTick, 150);
+    }
+
+    function gameTick() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      snake.update();
+      snake.draw();
+
+      // Food
+      ctx.fillStyle = "#f00";
+      ctx.shadowColor = "#f00";
+      ctx.shadowBlur = 10;
+      ctx.fillRect(food.x, food.y, scale, scale);
+      ctx.shadowBlur = 0;
+
+      if (snake.eat(food)) {
+        food = randomFood();
+        document.getElementById("eat-sound").play();
+        scoreDisplay.textContent = snake.total;
+        for (let i = 0; i < 10; i++) {
+          particles.push({
+            x: food.x + scale / 2,
+            y: food.y + scale / 2,
+            dx: (Math.random() - 0.5) * 4,
+            dy: (Math.random() - 0.5) * 4,
+            life: 30
+          });
+        }
+      }
+
+      // Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        ctx.fillStyle = "#f00";
+        ctx.globalAlpha = p.life / 30;
+        ctx.fillRect(p.x, p.y, 4, 4);
+        ctx.globalAlpha = 1.0;
+        p.x += p.dx;
+        p.y += p.dy;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      snake.checkCollision();
+    }
+
+    window.addEventListener("keydown", e => {
+      const direction = e.key.replace("Arrow", "");
+      snake.changeDirection(direction);
+    });
+
+    restartBtn.addEventListener("click", () => {
+      gameOverScreen.style.opacity = 0;
+      setTimeout(() => {
+        gameOverScreen.style.display = "none";
+        scoreDisplay.textContent = "0";
+        clearInterval(gameLoop);
+        startGame();
+      }, 500);
+    });
+
+    function randomFood() {
+      return {
+        x: Math.floor(Math.random() * columns) * scale,
+        y: Math.floor(Math.random() * rows) * scale
+      };
+    }
+
+    function Snake() {
+      this.x = 0;
+      this.y = 0;
+      this.xSpeed = scale;
+      this.ySpeed = 0;
+      this.total = 0;
+      this.tail = [];
+
+      this.draw = function () {
+        ctx.fillStyle = themes[themeIndex].glow;
+        ctx.shadowColor = themes[themeIndex].glow;
+        ctx.shadowBlur = 8;
+        for (let i = 0; i < this.tail.length; i++) {
+          ctx.fillRect(this.tail[i].x, this.tail[i].y, scale, scale);
+        }
+        ctx.fillRect(this.x, this.y, scale, scale);
+        ctx.shadowBlur = 0;
+      };
+
+      this.update = function () {
+        for (let i = 0; i < this.tail.length - 1; i++) {
+          this.tail[i] = this.tail[i + 1];
+        }
+        if (this.total >= 1) {
+          this.tail[this.total - 1] = { x: this.x, y: this.y };
+        }
+        this.x += this.xSpeed;
+        this.y += this.ySpeed;
+      };
+
+      this.changeDirection = function (direction) {
+        switch (direction) {
+          case "Up":
+            if (this.ySpeed === 0) {
+              this.xSpeed = 0;
+              this.ySpeed = -scale;
+            }
+            break;
+          case "Down":
+            if (this.ySpeed === 0) {
+              this.xSpeed = 0;
+              this.ySpeed = scale;
+            }
+            break;
+          case "Left":
+            if (this.xSpeed === 0) {
+              this.xSpeed = -scale;
+              this.ySpeed = 0;
+            }
+            break;
+          case "Right":
+            if (this.xSpeed === 0) {
+              this.xSpeed = scale;
+              this.ySpeed = 0;
+            }
+            break;
+        }
+      };
+
+      this.eat = function (food) {
+        return this.x === food.x && this.y === food.y && ++this.total;
+      };
+
+      this.checkCollision = function () {
+        for (let i = 0; i < this.tail.length; i++) {
+          if (this.x === this.tail[i].x && this.y === this.tail[i].y) {
+            return this.reset();
+          }
+        }
+
+        if (
+          this.x < 0 ||
+          this.x >= canvas.width ||
+          this.y < 0 ||
+          this.y >= canvas.height
+        ) {
+          this.reset();
+        }
+      };
+
+      this.reset = function () {
+        clearInterval(gameLoop);
+        finalScore.textContent = this.total;
+        gameOverScreen.style.display = "flex";
+        setTimeout(() => gameOverScreen.style.opacity = 1, 10);
+      };
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
+
